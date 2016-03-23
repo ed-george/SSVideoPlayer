@@ -38,6 +38,7 @@
 @property (nonatomic,assign) BOOL videoListHidden;
 @property (nonatomic,assign) NSInteger playIndex;
 @property (nonatomic,strong) UIActivityIndicatorView *indicator;
+@property (nonatomic,strong) UIBarButtonItem *durationButton;
 
 @end
 
@@ -81,14 +82,15 @@
 
 - (void)setupNavigationBar {
     self.navigationController.navigationBar.barStyle = UIBarStyleBlack;
-    UIBarButtonItem *menu = [[UIBarButtonItem alloc]initWithImage:[[self imageWithName:@"player_menu"]imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] style:UIBarButtonItemStyleDone target:self action:@selector(menu:)];
+    //    UIBarButtonItem *menu = [[UIBarButtonItem alloc]initWithImage:[[self imageWithName:@"player_menu"]imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] style:UIBarButtonItemStyleDone target:self action:@selector(menu:)];
     UIBarButtonItem *quit = [[UIBarButtonItem alloc]initWithImage:[[self imageWithName:@"player_quit"]imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] style:UIBarButtonItemStyleDone target:self action:@selector(quit:)];
     self.slider = [[SSVideoPlaySlider alloc]initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width-200, 20)];
     self.slider.thumbImage = [self imageWithName:@"player_slider"];
     [self.slider addTarget:self action:@selector(playProgressChange:) forControlEvents:UIControlEventValueChanged];
     self.navigationItem.leftBarButtonItem = quit;
     self.navigationItem.titleView = self.slider;
-    self.navigationItem.rightBarButtonItem = menu;
+    //Remove for now
+    //self.navigationItem.rightBarButtonItem = menu;
 }
 
 - (void)setupBottomBar {
@@ -104,17 +106,20 @@
     [self.playButton addTarget:self action:@selector(playAction:) forControlEvents:UIControlEventTouchUpInside];
     UIBarButtonItem *playItem = [[UIBarButtonItem alloc]initWithCustomView:self.playButton];
     UIBarButtonItem *nextItem = [[UIBarButtonItem alloc]initWithImage:[[self imageWithName:@"player_next"]imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] style:UIBarButtonItemStyleDone target:self action:@selector(next:)];
-    UIButton *displayButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    displayButton.frame = CGRectMake(0, 0, 30, 30);
-    [displayButton setBackgroundImage:[self imageWithName:@"player_fill"] forState:UIControlStateNormal];
-    [displayButton setBackgroundImage:[self imageWithName:@"player_fit"] forState:UIControlStateSelected];
-    [displayButton addTarget:self action:@selector(displayModeChanged:) forControlEvents:UIControlEventTouchUpInside];
+    
     self.volume = [[UISlider alloc]initWithFrame:CGRectMake(0, 0, 150, 20)];
     self.volume.value = [[MPMusicPlayerController applicationMusicPlayer]volume];
     [self.volume setThumbImage:[self imageWithName:@"player_volume"] forState:UIControlStateNormal];
     [self.volume addTarget:self action:@selector(volumeChanged:) forControlEvents:UIControlEventValueChanged];
     UIBarButtonItem *volumnItem = [[UIBarButtonItem alloc]initWithCustomView:self.volume];
-    UIBarButtonItem *displayItem = [[UIBarButtonItem alloc]initWithCustomView:displayButton];
+    SSVideoModel *model = self.videoPaths[self.playIndex];
+    UIBarButtonItem *displayItem = [[UIBarButtonItem alloc] initWithTitle:model.name style:UIBarButtonItemStylePlain target:self action:nil];
+    [displayItem setTitleTextAttributes:@{
+                                          NSFontAttributeName: [UIFont fontWithName:@"Montserrat-Regular" size:12.0],
+                                          NSForegroundColorAttributeName: [UIColor whiteColor]
+                                          } forState:UIControlStateNormal];
+    displayItem.enabled = NO;
+    
     self.bottomBar.items = @[volumnItem,space,previousItem,space,playItem,space,nextItem,space,space,displayItem,space];
 }
 
@@ -299,9 +304,16 @@
             });
         };
         _player.progressBlock = ^(float f) {
+            
+            float seconds = _player.duration * f;
+            NSString *time = [weakSelf formatPlayedTime:seconds];
+            
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (!weakSelf.slider.slide) {
                     weakSelf.slider.value = f;
+                    [UIView performWithoutAnimation:^{
+                        weakSelf.durationButton.title = time;
+                    }];
                 }
             });
         };
@@ -360,9 +372,19 @@
 
 #pragma mark - SSVideoPlayerDelegate
 
-- (void)videoPlayerDidReadyPlay:(SSVideoPlayer *)videoPlayer {
+- (void)videoPlayerDidReadyPlay:(SSVideoPlayer *)videoPlayer withDuration:(float)duration {
     [self stopIndicator];
+    
+    
+    self.durationButton = [[UIBarButtonItem alloc] initWithTitle:[self formatPlayedTime:0] style:UIBarButtonItemStylePlain target:self action:nil];
+    [self.durationButton setTitleTextAttributes:@{
+                                                  NSFontAttributeName: [UIFont fontWithName:@"Montserrat-Regular" size:12.0],
+                                                  NSForegroundColorAttributeName: [UIColor whiteColor]
+                                                  } forState:UIControlStateNormal];
+    self.durationButton.enabled = NO;
+    self.navigationItem.rightBarButtonItem = self.durationButton;
     [self.player play];
+    
 }
 
 - (void)videoPlayerDidBeginPlay:(SSVideoPlayer *)videoPlayer {
@@ -379,7 +401,17 @@
 
 - (void)videoPlayerDidFailedPlay:(SSVideoPlayer *)videoPlayer {
     [self stopIndicator];
-    [[[UIAlertView alloc]initWithTitle:@"该视频无法播放" message:nil delegate:nil cancelButtonTitle:@"确定" otherButtonTitles:nil, nil]show];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Video Error" message:@"Error during playback. Please try again." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction* cancel = [UIAlertAction
+                             actionWithTitle:@"OK"
+                             style:UIAlertActionStyleDefault
+                             handler:^(UIAlertAction * action)
+                             {
+                                 [alert dismissViewControllerAnimated:YES completion:nil];
+                                 
+                             }];
+    [alert addAction:cancel];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (UIImage *)imageWithName:(NSString *)name {
@@ -396,5 +428,12 @@
     [super didReceiveMemoryWarning];
 }
 
+- (NSString*)formatPlayedTime:(float)seconds
+{
+    return [NSString stringWithFormat:@"%@/%@",
+            [self.player formattedDuration:seconds],
+            [self.player formattedDuration:self.player.duration]
+            ];
+}
 
 @end
