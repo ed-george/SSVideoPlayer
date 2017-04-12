@@ -38,6 +38,7 @@
 @property (nonatomic,assign) BOOL videoListHidden;
 @property (nonatomic,assign) NSInteger playIndex;
 @property (nonatomic,strong) UIActivityIndicatorView *indicator;
+@property CMTime currentPlayTime;
 
 @end
 
@@ -48,6 +49,7 @@
     self = [super init];
     if (self) {
         self.videoPaths = [videoList mutableCopy];
+        self.currentPlayTime = kCMTimeZero;
     }
     return self;
 }
@@ -58,6 +60,15 @@
     [self setupNavigationBar];
     [self setupBottomBar];
     [self setupVideoList];
+}
+
+- (NSString *)screenName{
+    return nil;
+}
+
+-(void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    [self.player play];
 }
 
 - (void)setup {
@@ -122,6 +133,13 @@
 
 - (void)quit:(UIBarButtonItem *)item {
     [self dismissViewControllerAnimated:NO completion:nil];
+
+    float pctPlayed = CMTimeGetSeconds(self.player.currentPlayTime) / self.player.duration;
+    pctPlayed = MAX(0, pctPlayed);
+    
+    if ([self.delegate respondsToSelector:@selector(videoPlayerController:didFinishWithPctPlayed:)]) {
+        [self.delegate videoPlayerController:self didFinishWithPctPlayed:pctPlayed * 100];
+    }
 }
 
 - (void)volumeChanged:(UISlider *)slider {
@@ -366,11 +384,16 @@
 }
 
 - (void)videoPlayerDidBeginPlay:(SSVideoPlayer *)videoPlayer {
+    [self stopIndicator];
     self.playButton.selected = NO;
+    SSVideoModel* model = self.videoPaths[self.playIndex];
+    [self trackEvent:model.name withAction:@"Video played" withLabel:@"Play"];
 }
 
 - (void)videoPlayerDidEndPlay:(SSVideoPlayer *)videoPlayer {
     self.playButton.selected = YES;
+    SSVideoModel* model = self.videoPaths[self.playIndex];
+    [self trackEvent:model.name withAction:@"Video watched" withLabel:@"End"];
 }
 
 - (void)videoPlayerDidSwitchPlay:(SSVideoPlayer *)videoPlayer {
@@ -379,7 +402,7 @@
 
 - (void)videoPlayerDidFailedPlay:(SSVideoPlayer *)videoPlayer {
     [self stopIndicator];
-    [[[UIAlertView alloc]initWithTitle:@"该视频无法播放" message:nil delegate:nil cancelButtonTitle:@"确定" otherButtonTitles:nil, nil]show];
+    [[[UIAlertView alloc]initWithTitle:@"Oops" message:@"Something went wrong playing this video, please try again shortly." delegate:nil cancelButtonTitle:@"Ok" otherButtonTitles:nil, nil]show];
 }
 
 - (UIImage *)imageWithName:(NSString *)name {

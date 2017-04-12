@@ -7,6 +7,9 @@
 //
 
 #import <UIKit/UIKit.h>
+#import "TrackedViewController.h"
+
+@protocol SSVideoPlayControllerDelegete;
 
 @interface SSVideoModel : NSObject
 
@@ -18,8 +21,14 @@
 @end
 
 
-@interface SSVideoPlayController : UIViewController
+@interface SSVideoPlayController : TrackedViewController
+
+@property (nonatomic, weak) id<SSVideoPlayControllerDelegete> delegate;
 
 - (instancetype)initWithVideoList:(NSArray <SSVideoModel *> *)videoList;
 
+@end
+
+@protocol SSVideoPlayControllerDelegete <NSObject>
+-(void)videoPlayerController:(SSVideoPlayController*)controller didFinishWithPctPlayed:(NSInteger)pctPlayed;
 @end

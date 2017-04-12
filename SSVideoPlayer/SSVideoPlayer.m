@@ -9,7 +9,6 @@
 
 #import "SSVideoPlayer.h"
 #import <AVFoundation/AVFoundation.h>
-#import <math.h>
 
 static NSString *const SSVideoPlayerItemStatusKeyPath = @"status";
 static NSString *const SSVideoPlayerItemLoadedTimeRangesKeyPath = @"loadedTimeRanges";
@@ -31,6 +30,13 @@ static NSString *const SSVideoPlayerItemLoadedTimeRangesKeyPath = @"loadedTimeRa
         _player = [[AVPlayer alloc]init];
         _displayMode = SSVideoPlayerDisplayModeAspectFit;
         _pausePlayWhenMove = YES;
+        
+        
+        __weak __typeof__(self) weakSelf = self;
+        CMTime interval = CMTimeMakeWithSeconds(1.0, NSEC_PER_SEC); // 1 second
+        [_player addPeriodicTimeObserverForInterval:interval queue:NULL usingBlock:^(CMTime time) {
+            weakSelf.currentPlayTime = time;
+        }];
     }
     return self;
 }
@@ -143,9 +149,9 @@ static NSString *const SSVideoPlayerItemLoadedTimeRangesKeyPath = @"loadedTimeRa
     if ([keyPath isEqualToString:SSVideoPlayerItemStatusKeyPath]) {
         AVPlayerStatus status = [change[NSKeyValueChangeNewKey]integerValue];
         if (status == AVPlayerStatusReadyToPlay) {
-            if ([self.delegate respondsToSelector:@selector(videoPlayerDidReadyPlay:withDuration:)]) {
+            if ([self.delegate respondsToSelector:@selector(videoPlayerDidReadyPlay:)]) {
                 _duration = CMTimeGetSeconds(self.currentPlayItem.asset.duration);
-                [self.delegate videoPlayerDidReadyPlay:self withDuration:_duration];
+                [self.delegate videoPlayerDidReadyPlay:self];
             }
         }
         else if (status == AVPlayerStatusFailed) {
@@ -211,22 +217,6 @@ static NSString *const SSVideoPlayerItemLoadedTimeRangesKeyPath = @"loadedTimeRa
         return;
     }
     [self.player pause];
-}
-
-- (NSString*)formattedDuration:(float)duration
-{
-    if(!duration) return @"0:00";
-    
-    int divisor_for_minutes = fmodf(duration,(60 * 60));
-    int minutes = floor(divisor_for_minutes / 60);
-    int divisor_for_seconds = fmodf(divisor_for_minutes, 60);
-    int seconds = ceil(divisor_for_seconds);
-    
-    return [NSString stringWithFormat:@"%@%i:%@%i",
-            minutes < 10 ? @"0" : @"",
-            minutes,
-            seconds < 10 ? @"0" : @"",
-            seconds];
 }
 
 - (void)dealloc {
